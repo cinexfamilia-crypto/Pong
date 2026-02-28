@@ -1,4 +1,4 @@
--- PONG HUB + SISTEMA DE CÓDIGOS + ADMIN
+-- PONG HUB FINAL ESTÁVEL
 
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
@@ -6,265 +6,243 @@ local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
 
--- VARIÁVEIS
-local ballSpeedX = 4
-local ballSpeedY = 4
+-- CONFIG
+local MAX_SPEED = 8
+local paused = false
 local playerScore = 0
 local aiScore = 0
 local aiDifficulty = 0.5
-local MAX_SPEED = 9
 local canScore = true
-local paused = false
+local dragging = false
 
 -- GUI
-local gui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
+local gui = Instance.new("ScreenGui", player.PlayerGui)
 gui.Name = "PongHub"
 
 local main = Instance.new("Frame", gui)
 main.Size = UDim2.new(0, 500, 0, 300)
-main.Position = UDim2.new(0.5, -250, 0.5, -150)
+main.Position = UDim2.new(0.5,-250,0.5,-150)
 main.BackgroundColor3 = Color3.fromRGB(20,20,20)
 main.Active = true
 main.Draggable = true
 
--- BOTÃO CÓDIGO
-local codeButton = Instance.new("TextButton", main)
-codeButton.Size = UDim2.new(0,50,1,0)
-codeButton.Position = UDim2.new(0,-50,0,0)
-codeButton.Text = "CÓD"
-codeButton.BackgroundColor3 = Color3.fromRGB(40,40,40)
-codeButton.TextColor3 = Color3.new(1,1,1)
-
--- SCORE
 local scoreLabel = Instance.new("TextLabel", main)
 scoreLabel.Size = UDim2.new(1,0,0,30)
 scoreLabel.BackgroundTransparency = 1
 scoreLabel.TextColor3 = Color3.new(1,1,1)
 scoreLabel.TextScaled = true
-scoreLabel.Text = "0 : 0"
 
--- GAME AREA
 local gameArea = Instance.new("Frame", main)
 gameArea.Position = UDim2.new(0,0,0,30)
 gameArea.Size = UDim2.new(1,0,1,-30)
 gameArea.BackgroundColor3 = Color3.fromRGB(10,10,10)
 gameArea.ClipsDescendants = true
 
--- PLAYER
+-- PADDLES
 local playerPaddle = Instance.new("Frame", gameArea)
 playerPaddle.Size = UDim2.new(0,10,0,60)
 playerPaddle.Position = UDim2.new(0,10,0.5,-30)
 playerPaddle.BackgroundColor3 = Color3.new(1,1,1)
 
--- AI
 local aiPaddle = Instance.new("Frame", gameArea)
 aiPaddle.Size = UDim2.new(0,10,0,60)
 aiPaddle.Position = UDim2.new(1,-20,0.5,-30)
 aiPaddle.BackgroundColor3 = Color3.new(1,1,1)
 
--- FUNÇÃO CRIAR BOLA
+-- BOLAS
 local balls = {}
 
-local function createBall()
-	local ball = Instance.new("Frame", gameArea)
-	ball.Size = UDim2.new(0,10,0,10)
-	ball.BackgroundColor3 = Color3.new(1,1,1)
-	ball.Position = UDim2.new(0.5,-5,0.5,-5)
+local function newBall()
+	local b = Instance.new("Frame", gameArea)
+	b.Size = UDim2.new(0,10,0,10)
+	b.BackgroundColor3 = Color3.new(1,1,1)
+	b.Position = UDim2.new(0.5,-5,0.5,-5)
 
 	table.insert(balls,{
-		object = ball,
+		obj = b,
 		speedX = (math.random(0,1)==0 and -4 or 4),
 		speedY = math.random(-3,3)
 	})
 end
 
-createBall()
+newBall()
 
--- RESET
-local function resetBall(ballData)
-	ballData.object.Position = UDim2.new(0.5,-5,0.5,-5)
-	ballData.speedX = (math.random(0,1)==0 and -4 or 4)
-	ballData.speedY = math.random(-3,3)
+local function resetBall(ball)
+	ball.obj.Position = UDim2.new(0.5,-5,0.5,-5)
+	ball.speedX = (math.random(0,1)==0 and -4 or 4)
+	ball.speedY = math.random(-3,3)
 end
 
--- CONTROLE PLAYER
-UIS.InputChanged:Connect(function(input)
-
+-- CONTROLE SUAVE MOBILE
+UIS.InputBegan:Connect(function(input)
 	if paused then return end
 
-	if input.UserInputType ~= Enum.UserInputType.Touch
-	and input.UserInputType ~= Enum.UserInputType.MouseMovement then
-		return
+	if input.UserInputType == Enum.UserInputType.Touch then
+		local pos = input.Position
+		local areaPos = gameArea.AbsolutePosition
+		local areaSize = gameArea.AbsoluteSize
+
+		if pos.X >= areaPos.X and pos.X <= areaPos.X+areaSize.X then
+			dragging = true
+		end
 	end
+end)
 
-	local pos = input.Position
-	local areaPos = gameArea.AbsolutePosition
-	local areaSize = gameArea.AbsoluteSize
+UIS.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.Touch then
+		dragging = false
+	end
+end)
 
-	local inside =
-		pos.X >= areaPos.X and
-		pos.X <= areaPos.X + areaSize.X and
-		pos.Y >= areaPos.Y and
-		pos.Y <= areaPos.Y + areaSize.Y
+UIS.InputChanged:Connect(function(input)
+	if paused then return end
+	if not dragging then return end
 
-	if not inside then return end
-
-	local y = pos.Y - areaPos.Y
-	y = math.clamp(y - playerPaddle.AbsoluteSize.Y/2,0,areaSize.Y - playerPaddle.AbsoluteSize.Y)
-
-	playerPaddle.Position = UDim2.new(0,10,0,y)
+	if input.UserInputType == Enum.UserInputType.Touch then
+		local y = input.Position.Y - gameArea.AbsolutePosition.Y
+		y = math.clamp(y - playerPaddle.AbsoluteSize.Y/2,0,gameArea.AbsoluteSize.Y-playerPaddle.AbsoluteSize.Y)
+		playerPaddle.Position = UDim2.new(0,10,0,y)
+	end
 end)
 
 -- LOOP
 RunService.RenderStepped:Connect(function()
-
 	if paused then return end
 
-	for _,ballData in pairs(balls) do
+	for _,ball in ipairs(balls) do
 
-		local ball = ballData.object
-		local newX = ball.Position.X.Offset + ballData.speedX
-		local newY = ball.Position.Y.Offset + ballData.speedY
+		local newX = ball.obj.Position.X.Offset + ball.speedX
+		local newY = ball.obj.Position.Y.Offset + ball.speedY
 
-		if newY <= 0 or newY >= gameArea.AbsoluteSize.Y - ball.AbsoluteSize.Y then
-			ballData.speedY = -ballData.speedY
+		if newY <= 0 or newY >= gameArea.AbsoluteSize.Y - ball.obj.AbsoluteSize.Y then
+			ball.speedY = -ball.speedY
 		end
 
+		-- PLAYER
 		if newX <= playerPaddle.Position.X.Offset + playerPaddle.AbsoluteSize.X then
-			if newY + ball.AbsoluteSize.Y >= playerPaddle.Position.Y.Offset
+			if newY + ball.obj.AbsoluteSize.Y >= playerPaddle.Position.Y.Offset
 			and newY <= playerPaddle.Position.Y.Offset + playerPaddle.AbsoluteSize.Y then
-				ballData.speedX = -ballData.speedX * 1.05
+				ball.speedX = -ball.speedX
 			end
 		end
 
-		if newX + ball.AbsoluteSize.X >= aiPaddle.Position.X.Offset then
-			if newY + ball.AbsoluteSize.Y >= aiPaddle.Position.Y.Offset
+		-- AI
+		if newX + ball.obj.AbsoluteSize.X >= aiPaddle.Position.X.Offset then
+			if newY + ball.obj.AbsoluteSize.Y >= aiPaddle.Position.Y.Offset
 			and newY <= aiPaddle.Position.Y.Offset + aiPaddle.AbsoluteSize.Y then
-				ballData.speedX = -ballData.speedX * 1.05
+				ball.speedX = -ball.speedX
 			end
 		end
 
-		ballData.speedX = math.clamp(ballData.speedX,-MAX_SPEED,MAX_SPEED)
-		ballData.speedY = math.clamp(ballData.speedY,-MAX_SPEED,MAX_SPEED)
+		ball.speedX = math.clamp(ball.speedX,-MAX_SPEED,MAX_SPEED)
+		ball.speedY = math.clamp(ball.speedY,-MAX_SPEED,MAX_SPEED)
 
 		if canScore then
 			if newX < 0 then
 				canScore = false
 				aiScore += 1
-				resetBall(ballData)
+				resetBall(ball)
 				task.wait(1)
 				canScore = true
 			elseif newX > gameArea.AbsoluteSize.X then
 				canScore = false
 				playerScore += 1
-				resetBall(ballData)
+				resetBall(ball)
 				task.wait(1)
 				canScore = true
 			end
 		end
 
-		ball.Position = UDim2.new(0,newX,0,newY)
+		ball.obj.Position = UDim2.new(0,newX,0,newY)
 	end
 
 	scoreLabel.Text = playerScore.." : "..aiScore
 
-	-- IA
-	local targetY = balls[1].object.Position.Y.Offset - aiPaddle.AbsoluteSize.Y/2
-	local aiSpeed = 3 + (aiDifficulty * 3)
-
-	if aiPaddle.Position.Y.Offset < targetY then
-		aiPaddle.Position += UDim2.new(0,0,0,aiSpeed)
+	-- IA simples estável
+	local target = balls[1].obj.Position.Y.Offset
+	if aiPaddle.Position.Y.Offset < target then
+		aiPaddle.Position += UDim2.new(0,0,0,4)
 	else
-		aiPaddle.Position -= UDim2.new(0,0,0,aiSpeed)
+		aiPaddle.Position -= UDim2.new(0,0,0,4)
 	end
-
-	local aiY = math.clamp(aiPaddle.Position.Y.Offset,0,gameArea.AbsoluteSize.Y - aiPaddle.AbsoluteSize.Y)
-	aiPaddle.Position = UDim2.new(1,-20,0,aiY)
-
 end)
 
--- MENU CÓDIGOS
-local codeFrame = Instance.new("Frame", main)
-codeFrame.Size = UDim2.new(1,0,1,0)
-codeFrame.BackgroundColor3 = Color3.fromRGB(15,15,15)
-codeFrame.Visible = false
+-- BOTÃO CÓD
+local codeBtn = Instance.new("TextButton", main)
+codeBtn.Size = UDim2.new(0,50,1,0)
+codeBtn.Position = UDim2.new(0,-50,0,0)
+codeBtn.Text = "CÓD"
 
-local box = Instance.new("TextBox", codeFrame)
+-- MENU CÓDIGOS
+local codeMenu = Instance.new("Frame", main)
+codeMenu.Size = UDim2.new(1,0,1,0)
+codeMenu.BackgroundColor3 = Color3.fromRGB(15,15,15)
+codeMenu.Visible = false
+
+local box = Instance.new("TextBox", codeMenu)
 box.Size = UDim2.new(0.6,0,0,40)
 box.Position = UDim2.new(0.2,0,0.3,0)
 box.PlaceholderText = "códigos"
-box.Text = ""
 
-local enter = Instance.new("TextButton", codeFrame)
+local enter = Instance.new("TextButton", codeMenu)
 enter.Size = UDim2.new(0.6,0,0,40)
 enter.Position = UDim2.new(0.2,0,0.5,0)
 enter.Text = "ENTER"
 
-local result = Instance.new("TextLabel", codeFrame)
-result.Size = UDim2.new(1,0,0,40)
-result.Position = UDim2.new(0,0,0.7,0)
-result.BackgroundTransparency = 1
-result.TextColor3 = Color3.new(1,1,1)
-result.TextScaled = true
+-- ADMIN ABA SEPARADA
+local adminMenu = Instance.new("Frame", main)
+adminMenu.Size = UDim2.new(1,0,1,0)
+adminMenu.BackgroundColor3 = Color3.fromRGB(35,35,35)
+adminMenu.Visible = false
 
--- ADMIN PANEL
-local adminFrame = Instance.new("Frame", main)
-adminFrame.Size = UDim2.new(1,0,1,0)
-adminFrame.BackgroundColor3 = Color3.fromRGB(30,30,30)
-adminFrame.Visible = false
-
-local function makeButton(text,y,callback)
-	local b = Instance.new("TextButton", adminFrame)
-	b.Size = UDim2.new(0.6,0,0,40)
-	b.Position = UDim2.new(0.2,0,0,y)
-	b.Text = text
-	b.MouseButton1Click:Connect(callback)
+local function makeBtn(txt,pos,func)
+	local b = Instance.new("TextButton", adminMenu)
+	b.Size = UDim2.new(0.6,0,0,35)
+	b.Position = UDim2.new(0.2,0,0,pos)
+	b.Text = txt
+	b.MouseButton1Click:Connect(func)
 end
 
-makeButton("+ Player",0.1,function() playerScore +=1 end)
-makeButton("- Player",0.2,function() playerScore -=1 end)
-makeButton("+ IA",0.3,function() aiScore +=1 end)
-makeButton("- IA",0.4,function() aiScore -=1 end)
+makeBtn("+ Player",0.1,function() playerScore+=1 end)
+makeBtn("- Player",0.2,function() playerScore-=1 end)
+makeBtn("+ IA",0.3,function() aiScore+=1 end)
+makeBtn("- IA",0.4,function() aiScore-=1 end)
 
-makeButton("+ Bola (15s)",0.55,function()
-	createBall()
+makeBtn("+ Bola 15s",0.55,function()
+	newBall()
 	task.delay(15,function()
-		if #balls > 1 then
-			local last = balls[#balls]
-			last.object:Destroy()
+		if #balls>1 then
+			balls[#balls].obj:Destroy()
 			table.remove(balls,#balls)
 		end
 	end)
 end)
 
--- BOTÃO CÓD
-codeButton.MouseButton1Click:Connect(function()
-	paused = true
-	gameArea.Visible = false
-	codeFrame.Visible = true
+makeBtn("Fechar",0.75,function()
+	adminMenu.Visible=false
+	gameArea.Visible=true
+	paused=false
+end)
+
+-- ABRIR CÓD
+codeBtn.MouseButton1Click:Connect(function()
+	paused=true
+	gameArea.Visible=false
+	codeMenu.Visible=true
 end)
 
 -- ENTER
 enter.MouseButton1Click:Connect(function()
-
-	if box.Text == "15" then
-		playerScore += 15
-		result.Text = "succes!"
-		task.wait(1)
-
-	elseif box.Text == "dono" then
-		codeFrame.Visible = false
-		adminFrame.Visible = true
+	if box.Text=="15" then
+		playerScore+=15
+	elseif box.Text=="dono" then
+		codeMenu.Visible=false
+		adminMenu.Visible=true
 		return
-
-	else
-		result.Text = "incorret"
-		task.wait(1)
 	end
 
-	result.Text = ""
-	box.Text = ""
-	codeFrame.Visible = false
-	gameArea.Visible = true
-	paused = false
+	box.Text=""
+	codeMenu.Visible=false
+	gameArea.Visible=true
+	paused=false
 end)
